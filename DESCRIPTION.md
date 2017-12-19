@@ -10,7 +10,7 @@ these points are determined by `dt` (the duration between points) and `N` (the n
 While the goal is to travel on a path near the reference path, the objectivity of nearness will be
 controlled by a cost function.  This cost function is largely based on the position of the vehicle
 relative to the path.  In order to determine the position, we need to track the state of the vehicle
-at each step.  The state information is summarized by the state vector `[x, y, ψ, v, ε<sub>cte</sub>, ε<sub>ψ</sub>]` (x-position, y-position, vehicle direction, velocity, cross track error, and direction error).  The
+at each step.  The state information is summarized by the state vector [x, y, ψ, v, ε<sub>cte</sub>, ε<sub>ψ</sub>] (x-position, y-position, vehicle direction, velocity, cross track error, and direction error).  The
 state of the vehicle is controlled by two actuator in our model: `[δ, a]` (change in direction and
 acceleration).  State-update equations are listed at the end of this section.
 
@@ -34,6 +34,9 @@ y<sub>t+1</sub> = y<sub>t</sub> + v<sub>t</sub> * sin(ψ<sub>t</sub>) * dt
 v<sub>t+1</sub> = v<sub>t</sub> + a<sub>t</sub> * dt
 ε<sub>cte,t+1</sub> = f(x<sub>t</sub>) - y<sub>t</sub> + v<sub>t</sub> * sin(ε<sub>ψ,t</sub>) * dt
 ε<sub>ψ,t+1</sub> = ψ<sub>t</sub> - *d* ψ(t) + v<sub>t</sub> * δ<sub>t</sub> / L<sub>f</sub> * dt
+
+I also elected to transform coordinates into vehicle space, where the vehicle is at the origin of
+its coordinate system.  In the vehicle coordinate system, ψ is parallel to the x axis.
 
 # Notes on tuning
 
