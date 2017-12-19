@@ -17,6 +17,9 @@ constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
 
+constexpr int actuator_delay_ms = 100; // 100 ms
+constexpr int reference_path_degree = 3;
+
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
 // else the empty string "" will be returned.
@@ -39,6 +42,13 @@ double polyeval(Eigen::VectorXd coeffs, double x) {
     result += coeffs[i] * pow(x, i);
   }
   return result;
+}
+
+// Transform global coordinates to vehicle space
+vector<double> tf(double px, double py, double psi, double gx, double gy) {
+  double dx = gx - px;
+  double dy = gy - py;
+	return {cos(-psi) * dx - sin(-psi) * dy, sin(-psi) * dx + cos(-psi) * dy};
 }
 
 // Fit a polynomial.
@@ -92,6 +102,10 @@ int main() {
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
 
+          // Project vehicle position into the future
+          px += v * cos(psi) * (actuator_delay_ms/1000.);
+          py += v * sin(psi) * (actuator_delay_ms/1000.);
+
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
@@ -100,6 +114,24 @@ int main() {
           */
           double steer_value;
           double throttle_value;
+          Eigen::VectorXd _ptsx(ptsx.size()), _ptsy(ptsy.size());
+          // Work in vehicle space
+          for (int i = 0; i < ptsx.size(); i++) {
+            auto vcoords = tf(px, py, psi, ptsx[i], ptsy[i]);
+            _ptsx[i] = vcoords[0];
+            _ptsy[i] = vcoords[1];
+          }
+
+          auto coeffs = polyfit(_ptsx, _ptsy, reference_path_degree);
+          double cte = polyeval(coeffs, 0) - 0;  // Vehicle at origin (working in vehicle coordinate)
+          double epsi = 0 - atan(coeffs[1]);  // Can use just coeff[1] because all others will be 0 at x == 0
+          Eigen::VectorXd state(6);
+          state << 0, 0, 0, v, cte, epsi;
+          auto res = mpc.Solve(state, coeffs);
+
+          steer_value = res[0] / deg2rad(25);
+          steer_value *= -1;  // To adjust for inverse direction in simulator
+          throttle_value = res[1];
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -107,13 +139,12 @@ int main() {
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = throttle_value;
 
-          //Display the MPC predicted trajectory 
+          //Display the MPC predicted trajectory
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
-
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
 
@@ -123,6 +154,10 @@ int main() {
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
+          for (size_t i = 0; i < ptsx.size(); i++) {
+            next_x_vals.push_back(_ptsx[i]);
+            next_y_vals.push_back(_ptsy[i]);
+          }
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
@@ -139,7 +174,7 @@ int main() {
           //
           // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
           // SUBMITTING.
-          this_thread::sleep_for(chrono::milliseconds(100));
+          this_thread::sleep_for(chrono::milliseconds(actuator_delay_ms));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
